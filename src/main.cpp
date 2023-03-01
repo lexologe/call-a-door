@@ -49,13 +49,18 @@ bool setupPMU()
   //! Use axp192 adc get voltage info
   axp.adc1Enable(AXP202_VBUS_VOL_ADC1 | AXP202_VBUS_CUR_ADC1 | AXP202_BATT_CUR_ADC1 | AXP202_BATT_VOL_ADC1, true);
 
+  return true;
+}
+
+void printAxp192readings() {
+
   float vbus_v = axp.getVbusVoltage();
   float vbus_c = axp.getVbusCurrent();
-  float batt_v = axp.getBattVoltage();
+  //float batt_v = axp.getBattVoltage();
   // axp.getBattPercentage();   // axp192 is not support percentage
-  Serial.printf("VBUS:%.2f mV %.2f mA, BATTERY: %.2f\n", vbus_v, vbus_c, batt_v);
-
-  return true;
+  if (vbus_c > 200) {
+    Serial.printf("VBUS: %.2f mV %.2f mA\n", vbus_v, vbus_c);
+  }
 }
 
 #define TINY_GSM_MODEM_SIM800
@@ -85,35 +90,6 @@ TinyGsm modem(serialGsm);
 
 // Initialize GSM client
 TinyGsmClient client(modem);
-
-void print_wakeup_reason()
-{
-  esp_sleep_wakeup_cause_t wakeup_reason;
-
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch (wakeup_reason)
-  {
-  case ESP_SLEEP_WAKEUP_EXT0:
-    Serial.println("Wakeup caused by external signal using RTC_IO");
-    break;
-  case ESP_SLEEP_WAKEUP_EXT1:
-    Serial.println("Wakeup caused by external signal using RTC_CNTL");
-    break;
-  case ESP_SLEEP_WAKEUP_TIMER:
-    Serial.println("Wakeup caused by timer");
-    break;
-  case ESP_SLEEP_WAKEUP_TOUCHPAD:
-    Serial.println("Wakeup caused by touchpad");
-    break;
-  case ESP_SLEEP_WAKEUP_ULP:
-    Serial.println("Wakeup caused by ULP program");
-    break;
-  default:
-    Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
-    break;
-  }
-}
 
 void setupModem()
 {
@@ -155,36 +131,22 @@ void turnOnNetlight()
     Serial.println("OK");
 }
 
-#define ADC_BAT 35 // TCALL 35
-int bat_mv = 0;
-
-void getBatteryFromADC()
-{
-  bat_mv = 0;
-  uint32_t oversample = 0;
-  for (size_t i = 0; i < 100; i++)
-  {
-    oversample += (uint32_t)analogRead(ADC_BAT);
-  }
-  bat_mv = (int)oversample / 100;
-  bat_mv = ((float)bat_mv / 4096) * 3600 * 2;
-
-  Serial.print("Battery from ADC: ");
-  Serial.print(bat_mv);
-  Serial.println("mV");
-}
-
 void setup()
 {
   Serial.begin(115200);
 
+  // some time to initialize PlatformIO serial monitor.
   delay(4 * 1000);
 
   // Start power management
+  Serial.print("Setting up power management ... ");
   if (!setupPMU()) {
 
+    Serial.println("FAIL. Restarting NOW.");
     esp_restart();
   }
+  Serial.println("OK");
+  printAxp192readings();
 
   // Some start operations
   Serial.print("Setting up modem ... ");
@@ -261,6 +223,7 @@ void loop()
   digitalWrite(LED_GPIO, LED_OFF);
   while (digitalRead(MODEM_RI)) {
     delay(100);
+    printAxp192readings();
     if (modem.getSignalQuality() == 0) {
       Serial.print("😟");
     }
